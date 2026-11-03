@@ -42,7 +42,7 @@ app/Modules/Kuis/
 - Namespace view = nama folder modul huruf kecil (`ModuleServiceProvider`). View bersama tetap global: `layouts.app`, `partials.flash|kosong|hapus|paginasi`, `errors.*`. Header ruang ada di `ruang::_kepala`.
 - `routes/web.php` hanya me-`require` semua `app/Modules/*/routes.php` (urutan abjad). Nama route global, jadi tetap unik lintas modul (`kuis.edit`, `admin.jurusan`, ...).
 - **Middleware route**: tulis semua middleware grup dalam **satu** array, misalnya `Route::middleware(['auth', 'role', 'can:akses,ruang'])->prefix('ruang/{ruang}')`. Memanggil `->middleware()` dua kali pada satu rantai *menimpa* middleware sebelumnya, sehingga `auth` bisa hilang. Di dalam closure grup, `->middleware()` bertingkat aman.
-- Migration, seeder, dan factory tetap terpusat di `database/` (satu migration LMS saling ber-FK).
+- Migration, seeder, dan factory tetap terpusat di `database/`, tidak di dalam modul.
 
 **Membuat modul baru** (`app/Modules/Contoh`):
 1. Buat `Controllers/`, `Models/`, `Views/`, dan `routes.php` dengan namespace `App\Modules\Contoh\...`.
@@ -73,7 +73,7 @@ app/Modules/Kuis/
 ## Konvensi kode
 
 - Nama tabel singular Bahasa Indonesia (`kelas`, `ruang`, `tugas`, `kuis`, `pengumuman`, ...), jadi setiap model mendefinisikan `protected $table`.
-- Skema LMS ada di satu migration `database/migrations/2026_10_27_000001_create_lms_tables.php`. Untuk perubahan skema, buat migration baru (jangan ubah yang lama bila sudah ada data nyata) lalu perbarui `DatabaseSeeder` bila perlu.
+- Migration LMS: **satu file per tabel** (`2026_10_27_000001_create_pengaturan_table.php` … `000018_create_pengumuman_table.php`), diurutkan sesuai dependensi FK. `users.kelas_id` mendapat FK lewat `000005_add_kelas_foreign_to_users_table.php` karena `users` dibuat sebelum `kelas`. Tabel baru = file baru dengan timestamp setelah tabel induknya. Perubahan skema tabel yang sudah ada = migration baru untuk tabel itu saja (jangan ubah file lama bila sudah ada data nyata). `down()` harus membalik `up()` agar `migrate:rollback` jalan. Perbarui `DatabaseSeeder` bila perlu. Tiga migration bawaan Laravel (users, cache, jobs) dibiarkan sesuai standar Laravel.
 - Seeder deterministik (`mt_srand(2026)`) dan tanggalnya relatif terhadap `now()`: pertahankan agar demo selalu terlihat "hidup".
 - Fitur admin ada di modulnya masing-masing (mis. `Jurusan`, `Rekap`, `Ruang\Controllers\PembagianController`), route admin berprefiks URL `admin/` dan nama `admin.`. Validasi inline dengan `$r->validate()` (belum memakai FormRequest), pesan error Bahasa Indonesia.
 - Layout `layouts/app.blade.php`; paginator memakai `partials.paginasi`.

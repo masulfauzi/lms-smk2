@@ -137,7 +137,7 @@ app/Support/Rapor.php                 perhitungan nilai & kehadiran per ruang
 app/helpers.php                       setting(), tgl(), sisa_waktu(), teks(), predikat(), icon()
 routes/web.php                        memuat semua app/Modules/*/routes.php
 resources/views/                      layouts/, partials/, errors/ (view bersama)
-database/migrations/                  tabel bawaan Laravel + 2026_10_27_000001_create_lms_tables.php (semua tabel LMS)
+database/migrations/                  tabel bawaan Laravel + 2026_10_27_0000NN_*.php (satu file per tabel LMS, urut sesuai FK)
 database/seeders/                     DatabaseSeeder: data contoh SMK
 public/css/app.css                    seluruh gaya tampilan (tanpa build tool)
 index.php                             penerus ke public/ agar bisa dibuka di http://localhost/<folder>
