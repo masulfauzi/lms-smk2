@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Jurusan\Models\Jurusan;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 /** Data master jurusan (satu form simpan untuk tambah & ubah) */
 class JurusanController extends Controller
@@ -14,7 +15,10 @@ class JurusanController extends Controller
     {
         $daftar = Jurusan::withCount('kelas')->orderBy('kode')->get();
         $ubah = $daftar->firstWhere('id', (int) $r->query('ubah'));
-        return view('jurusan::index', compact('daftar', 'ubah'));
+        return Inertia::render('Jurusan/Index', [
+            'daftar' => $daftar->map(fn ($j) => $j->only('id', 'kode', 'nama', 'kelas_count')),
+            'ubah' => $ubah?->only('id', 'kode', 'nama'),
+        ]);
     }
 
     public function simpan(Request $r)

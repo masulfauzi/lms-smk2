@@ -3,7 +3,6 @@
 namespace App\Modules\Pertemuan\Controllers;
 
 use App\Http\Controllers\Controller;
-
 use App\Modules\Pertemuan\Models\Pertemuan;
 use App\Modules\Pertemuan\Models\Presensi;
 use App\Modules\Ruang\Models\Ruang;
@@ -11,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class PertemuanController extends Controller
 {
@@ -24,7 +24,28 @@ class PertemuanController extends Controller
             'tanggal' => today(),
             'terbit' => true,
         ]);
-        return view('pertemuan::form', compact('ruang', 'pertemuan'));
+        return $this->form($ruang, $pertemuan);
+    }
+
+    /** Halaman form tambah/ubah pertemuan */
+    private function form(Ruang $ruang, Pertemuan $p)
+    {
+        return Inertia::render('Pertemuan/Form', [
+            'ruang' => $ruang->kepala(),
+            'pertemuan' => [
+                'id' => $p->exists ? $p->id : null,
+                'urutan' => $p->urutan,
+                'tanggal' => $p->tanggal?->format('Y-m-d'),
+                'judul' => $p->judul ?? '',
+                'isi' => $p->isi ?? '',
+                'video_url' => $p->video_url ?? '',
+                'lampiran_nama' => $p->lampiran_nama,
+                'presensi' => $p->exists ? (bool) $p->presensi_buka : true,
+                'jam_buka' => $p->presensi_buka?->format('H:i') ?? '07:00',
+                'jam_tutup' => $p->presensi_tutup?->format('H:i') ?? '15:00',
+                'terbit' => (bool) $p->terbit,
+            ],
+        ]);
     }
 
     public function store(Request $r, Ruang $ruang)
@@ -39,8 +60,7 @@ class PertemuanController extends Controller
     public function edit(Ruang $ruang, Pertemuan $pertemuan)
     {
         $this->milik($pertemuan, $ruang);
-        $ruang->load('mapel', 'kelas');
-        return view('pertemuan::form', compact('ruang', 'pertemuan'));
+        return $this->form($ruang, $pertemuan);
     }
 
     public function update(Request $r, Ruang $ruang, Pertemuan $pertemuan)
@@ -88,7 +108,47 @@ class PertemuanController extends Controller
         $sesudah = Pertemuan::where('ruang_id', $ruang->id)->where('urutan', '>', $pertemuan->urutan)
             ->when($u->role === 'siswa', fn ($q) => $q->where('terbit', true))->orderBy('urutan')->first();
 
-        return view('pertemuan::show', compact('ruang', 'pertemuan', 'presensiSaya', 'selesai', 'rekap', 'siswa', 'sebelum', 'sesudah'));
+        $p = $pertemuan;
+        $panelSiswa = null;
+        if ($u->role === 'siswa' && $p->presensi_buka) {
+            $panelSiswa = match (true) {
+                (bool) $presensiSaya => ['jenis' => 'sudah', 'judul' => 'Presensi: ' . Presensi::STATUS[$presensiSaya->status],
+                    'teks' => ($presensiSaya->waktu ? 'Tercatat ' . tgl($presensiSaya->waktu, true) : '') . ($presensiSaya->keterangan ? ' · ' . $presensiSaya->keterangan : '')],
+                $p->presensiTerbuka() => ['jenis' => 'buka', 'judul' => 'Presensi dibuka', 'teks' => 'Sampai pukul ' . $p->presensi_tutup->format('H.i')],
+                now()->lt($p->presensi_buka) => ['jenis' => 'belum', 'judul' => 'Presensi belum dibuka', 'teks' => 'Dibuka ' . tgl($p->presensi_buka, true) . ' s.d. ' . $p->presensi_tutup->format('H.i')],
+                default => ['jenis' => 'tutup', 'judul' => 'Presensi sudah ditutup', 'teks' => 'Kamu tercatat alpa. Hubungi guru bila ada izin/sakit.'],
+            };
+        }
+        $tutup = $p->presensi_tutup?->isPast();
+        return Inertia::render('Pertemuan/Show', [
+            'ruang' => $ruang->kepala(),
+            'pertemuan' => [
+                'id' => $p->id, 'urutan' => $p->urutan, 'judul' => $p->judul, 'terbit' => (bool) $p->terbit,
+                'tanggal' => tgl_panjang($p->tanggal),
+                'youtube_id' => $p->youtubeId(), 'video_url' => $p->video_url,
+                'isi_html' => $p->isi ? teks($p->isi) : null,
+                'lampiran_nama' => $p->lampiran_path ? $p->lampiran_nama : null,
+                'ada_presensi' => (bool) $p->presensi_buka,
+                'presensi_label' => $p->presensi_buka ? tgl($p->presensi_buka, true) . ' – ' . $p->presensi_tutup->format('H.i') : null,
+                'presensi_terbuka' => $p->presensiTerbuka(),
+            ],
+            'tugas' => $p->tugas->map(fn ($t) => ['id' => $t->id, 'judul' => $t->judul, 'tenggat' => tgl($t->tenggat, true)]),
+            'sebelum' => $sebelum?->only('id', 'urutan'),
+            'sesudah' => $sesudah?->only('id', 'urutan'),
+            'panelSiswa' => $panelSiswa,
+            'selesai' => $selesai,
+            'statusLabel' => Presensi::STATUS,
+            'hadirCount' => $rekap->where('status', 'hadir')->count(),
+            'presensiSiswa' => $siswa->values()->map(function ($s) use ($rekap, $tutup) {
+                $x = $rekap[$s->id] ?? null;
+                return [
+                    'id' => $s->id, 'nama' => $s->name,
+                    'waktu' => $x?->waktu ? $x->waktu->format('H.i') . ($x->oleh_guru ? ' (diisi guru)' : '') : '-',
+                    'status' => $x?->status ?? ($tutup ? 'alpa' : ''),
+                    'ket' => $x?->keterangan ?? '',
+                ];
+            }),
+        ]);
     }
 
     /** Siswa menyatakan hadir selama jendela presensi terbuka */

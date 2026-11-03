@@ -3,17 +3,25 @@
 namespace App\Modules\Auth\Controllers;
 
 use App\Http\Controllers\Controller;
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Inertia\Inertia;
 
 class AuthController extends Controller
 {
     public function form()
     {
-        return view('auth::login');
+        return Inertia::render('Auth/Login', [
+            'sekolah' => [
+                'nama' => setting('nama_sekolah'),
+                'npsn' => setting('npsn'),
+                'jenjang' => setting('jenjang'),
+                'alamat' => setting('alamat'),
+            ],
+            'demo' => config('app.env') !== 'production',
+        ]);
     }
 
     public function login(Request $r)
@@ -34,9 +42,19 @@ class AuthController extends Controller
         return redirect()->route('login');
     }
 
-    public function profil()
+    public function profil(Request $r)
     {
-        return view('auth::profil');
+        $u = $r->user();
+        return Inertia::render('Auth/Profil', [
+            'akun' => [
+                'name' => $u->name,
+                'username' => $u->username,
+                'role' => $u->role,
+                'role_label' => \App\Modules\Pengguna\Models\User::ROLES[$u->role],
+                'kelas' => $u->kelas?->nama,
+                'email' => $u->email,
+            ],
+        ]);
     }
 
     public function gantiPassword(Request $r)

@@ -8,6 +8,7 @@ use App\Modules\Pengguna\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class PenggunaController extends Controller
 {
@@ -22,7 +23,16 @@ class PenggunaController extends Controller
         if ($role === 'siswa' && $r->filled('kelas')) $q->where('kelas_id', $r->query('kelas'));
         $daftar = $q->paginate(25)->withQueryString();
         $ubah = $r->filled('ubah') ? User::where('role', $role)->find($r->query('ubah')) : null;
-        return view('pengguna::index', compact('role', 'daftar', 'kelas', 'ubah'));
+        return Inertia::render('Pengguna/Index', [
+            'role' => $role,
+            'query' => (object) $r->query(),
+            'daftar' => $daftar->through(fn ($p) => [
+                'id' => $p->id, 'name' => $p->name, 'username' => $p->username, 'kelas' => $p->kelas?->nama, 'jk' => $p->jk,
+                'aktif' => (bool) $p->aktif, 'terakhir_aktif' => $p->terakhir_aktif_at?->locale('id')->diffForHumans(),
+            ]),
+            'kelas' => $kelas->map(fn ($k) => $k->only('id', 'nama')),
+            'ubah' => $ubah?->only('id', 'name', 'username', 'jk', 'kelas_id', 'email', 'aktif'),
+        ]);
     }
 
     public function simpan(Request $r, string $role)

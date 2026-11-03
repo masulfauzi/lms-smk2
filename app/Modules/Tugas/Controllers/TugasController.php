@@ -3,13 +3,14 @@
 namespace App\Modules\Tugas\Controllers;
 
 use App\Http\Controllers\Controller;
-
-use App\Modules\Tugas\Models\Pengumpulan;
 use App\Modules\Pertemuan\Models\Pertemuan;
 use App\Modules\Ruang\Models\Ruang;
+use App\Modules\Tugas\Models\Pengumpulan;
 use App\Modules\Tugas\Models\Tugas;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
 
 class TugasController extends Controller
 {
@@ -27,7 +28,31 @@ class TugasController extends Controller
             ? Pengumpulan::where('siswa_id', $u->id)->whereIn('tugas_id', $tugas->pluck('id'))->get()->keyBy('tugas_id')
             : collect();
         $jumlahSiswa = $ruang->siswa()->count();
-        return view('tugas::index', compact('ruang', 'tugas', 'milikSaya', 'jumlahSiswa'));
+        $siswa = $u->role === 'siswa';
+        return Inertia::render('Tugas/Index', [
+            'ruang' => $ruang->kepala(),
+            'tugas' => $tugas->map(function ($t) use ($siswa, $milikSaya, $jumlahSiswa) {
+                $lewat = $t->lewatTenggat();
+                $lencana = [];
+                if ($siswa) {
+                    $k = $milikSaya[$t->id] ?? null;
+                    $lencana[] = match (true) {
+                        $k && $k->nilai !== null => ['hijau', 'Nilai ' . $k->nilai],
+                        (bool) $k => ['biru', $k->terlambat ? 'Terkumpul (terlambat)' : 'Terkumpul'],
+                        $lewat => ['merah', $t->boleh_terlambat ? 'Terlambat' : 'Tidak mengumpulkan'],
+                        default => ['oranye', sisa_waktu($t->tenggat)],
+                    };
+                } else {
+                    $lencana[] = ['biru', $t->pengumpulan_count . '/' . $jumlahSiswa . ' terkumpul'];
+                    if ($t->belum_dinilai_count) $lencana[] = ['kuning', $t->belum_dinilai_count . ' perlu dinilai'];
+                }
+                return [
+                    'id' => $t->id, 'judul' => $t->judul, 'lewat' => $lewat,
+                    'keterangan' => 'Tenggat ' . tgl($t->tenggat, true) . ' · ' . Tugas::JENIS[$t->jenis_kumpul] . ($t->boleh_terlambat ? '' : ' · tidak menerima terlambat'),
+                    'lencana' => $lencana,
+                ];
+            }),
+        ]);
     }
 
     public function create(Request $r, Ruang $ruang)
@@ -39,8 +64,28 @@ class TugasController extends Controller
             'boleh_terlambat' => true,
             'pertemuan_id' => $r->query('pertemuan'),
         ]);
+        return $this->form($ruang, $tugas);
+    }
+
+    /** Halaman form tambah/ubah tugas */
+    private function form(Ruang $ruang, Tugas $t)
+    {
         $pertemuan = Pertemuan::where('ruang_id', $ruang->id)->orderBy('urutan')->get(['id', 'urutan', 'judul']);
-        return view('tugas::form', compact('ruang', 'tugas', 'pertemuan'));
+        return Inertia::render('Tugas/Form', [
+            'ruang' => $ruang->kepala(),
+            'tugas' => [
+                'id' => $t->exists ? $t->id : null,
+                'judul' => $t->judul ?? '',
+                'instruksi' => $t->instruksi ?? '',
+                'lampiran_nama' => $t->lampiran_nama,
+                'tenggat' => $t->tenggat?->format('Y-m-d\TH:i'),
+                'jenis_kumpul' => $t->jenis_kumpul,
+                'pertemuan_id' => $t->pertemuan_id ? (int) $t->pertemuan_id : '',
+                'boleh_terlambat' => (bool) $t->boleh_terlambat,
+            ],
+            'jenis' => Tugas::JENIS,
+            'pertemuan' => $pertemuan->map(fn ($p) => ['id' => $p->id, 'label' => 'Pertemuan ' . $p->urutan . ': ' . Str::limit($p->judul, 40)]),
+        ]);
     }
 
     public function store(Request $r, Ruang $ruang)
@@ -54,9 +99,7 @@ class TugasController extends Controller
     public function edit(Ruang $ruang, Tugas $tugas)
     {
         $this->milik($tugas, $ruang);
-        $ruang->load('mapel', 'kelas');
-        $pertemuan = Pertemuan::where('ruang_id', $ruang->id)->orderBy('urutan')->get(['id', 'urutan', 'judul']);
-        return view('tugas::form', compact('ruang', 'tugas', 'pertemuan'));
+        return $this->form($ruang, $tugas);
     }
 
     public function update(Request $r, Ruang $ruang, Tugas $tugas)
@@ -88,12 +131,66 @@ class TugasController extends Controller
         $ruang->load('mapel', 'kelas');
         if ($u->role === 'siswa') {
             $milikSaya = Pengumpulan::where('tugas_id', $tugas->id)->where('siswa_id', $u->id)->first();
-            return view('tugas::siswa', compact('ruang', 'tugas', 'milikSaya'));
+            $m = $milikSaya;
+            return Inertia::render('Tugas/Siswa', [
+                'ruang' => $ruang->kepala(),
+                'tugas' => ['id' => $tugas->id],
+                'soal' => $this->soal($ruang, $tugas),
+                'jenisKumpul' => $tugas->jenis_kumpul,
+                'bisaDikumpulkan' => $tugas->bisaDikumpulkan(),
+                'lewatTenggat' => $tugas->lewatTenggat(),
+                'milikSaya' => $m ? [
+                    'id' => $m->id, 'nilai' => $m->nilai, 'tuntas' => $m->nilai !== null && $m->nilai >= $ruang->kkm,
+                    'komentar_html' => $m->komentar ? teks($m->komentar) : null,
+                    'dikumpulkan' => tgl($m->dikumpulkan_at, true), 'terlambat' => (bool) $m->terlambat,
+                    'teks' => $m->teks, 'teks_html' => $m->teks ? teks($m->teks) : null,
+                    'file_nama' => $m->file_path ? $m->file_nama : null,
+                ] : null,
+            ]);
         }
         $siswa = $ruang->siswa()->get();
         $kumpul = Pengumpulan::where('tugas_id', $tugas->id)->get()->keyBy('siswa_id');
         $pilih = $kumpul->get((int) $r->query('siswa')) ?? $kumpul->sortBy('dikumpulkan_at')->firstWhere('nilai', null);
-        return view('tugas::guru', compact('ruang', 'tugas', 'siswa', 'kumpul', 'pilih'));
+        $lewat = $tugas->lewatTenggat();
+        $pilih?->load('siswa');
+        return Inertia::render('Tugas/Guru', [
+            'ruang' => $ruang->kepala(),
+            'tugas' => ['id' => $tugas->id],
+            'soal' => $this->soal($ruang, $tugas),
+            'jumlahKumpul' => $kumpul->count(),
+            'pilih' => $pilih ? [
+                'id' => $pilih->id, 'siswa_id' => $pilih->siswa_id, 'nama' => $pilih->siswa->name,
+                'dikumpulkan' => tgl($pilih->dikumpulkan_at, true), 'terlambat' => (bool) $pilih->terlambat,
+                'teks_html' => $pilih->teks ? teks($pilih->teks) : null,
+                'file_nama' => $pilih->file_path ? $pilih->file_nama : null,
+                'nilai' => $pilih->nilai, 'komentar' => $pilih->komentar ?? '',
+            ] : null,
+            'siswa' => $siswa->values()->map(function ($s) use ($kumpul, $lewat) {
+                $k = $kumpul[$s->id] ?? null;
+                return [
+                    'id' => $s->id, 'nama' => $s->name, 'kumpul' => (bool) $k,
+                    'waktu' => $k ? tgl($k->dikumpulkan_at, true) : 'Belum mengumpulkan',
+                    'lencana' => match (true) {
+                        $k && $k->nilai !== null => ['hijau', (string) $k->nilai],
+                        (bool) $k => [$k->terlambat ? 'oranye' : 'kuning', $k->terlambat ? 'Terlambat' : 'Belum dinilai'],
+                        $lewat => ['merah', 'Tidak ada'],
+                        default => ['', '-'],
+                    },
+                ];
+            }),
+        ]);
+    }
+
+    /** Props bagian soal tugas (komponen LampiranSoal.vue, pengganti tugas::_soal) */
+    private function soal(Ruang $ruang, Tugas $t): array
+    {
+        return [
+            'judul' => $t->judul,
+            'tenggat' => tgl_panjang($t->tenggat) . ' pukul ' . $t->tenggat->format('H.i'),
+            'instruksi_html' => $t->instruksi ? teks($t->instruksi) : null,
+            'lampiran_nama' => $t->lampiran_path ? $t->lampiran_nama : null,
+            'url_lampiran' => $t->lampiran_path ? route('berkas.tugas', [$ruang, $t]) : null,
+        ];
     }
 
     public function kumpul(Request $r, Ruang $ruang, Tugas $tugas)

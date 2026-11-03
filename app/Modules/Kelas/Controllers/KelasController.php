@@ -8,6 +8,7 @@ use App\Modules\Kelas\Models\Kelas;
 use App\Modules\Pengguna\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 /** Data master kelas & wali kelas (satu form simpan untuk tambah & ubah) */
 class KelasController extends Controller
@@ -18,7 +19,15 @@ class KelasController extends Controller
         $jurusan = Jurusan::orderBy('kode')->get();
         $guru = User::where('role', 'guru')->where('aktif', true)->orderBy('name')->get();
         $ubah = $daftar->firstWhere('id', (int) $r->query('ubah'));
-        return view('kelas::index', compact('daftar', 'jurusan', 'guru', 'ubah'));
+        return Inertia::render('Kelas/Index', [
+            'daftar' => $daftar->map(fn ($k) => $k->only('id', 'nama', 'tingkat', 'siswa_count', 'ruang_count') + [
+                'jurusan' => $k->jurusan?->kode, 'wali' => $k->wali?->name,
+            ]),
+            'jurusan' => $jurusan->map(fn ($j) => $j->only('id', 'kode')),
+            'guru' => $guru->map(fn ($g) => $g->only('id', 'name')),
+            'tingkat' => Kelas::tingkatJenjang(),
+            'ubah' => $ubah?->only('id', 'tingkat', 'jurusan_id', 'nama', 'wali_id'),
+        ]);
     }
 
     public function simpan(Request $r)

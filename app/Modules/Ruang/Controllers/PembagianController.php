@@ -11,6 +11,7 @@ use App\Modules\Ruang\Models\Ruang;
 use App\Modules\Sekolah\Models\TahunAjaran;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 /** Pembagian mengajar: mapel apa diajar siapa di kelas mana, plus jadwal & link kelas daring */
 class PembagianController extends Controller
@@ -24,7 +25,21 @@ class PembagianController extends Controller
             ->where('tahun_ajaran_id', $ta?->id)->get()->sortBy('mapel.nama')->values() : collect();
         $mapel = Mapel::orderBy('nama')->get();
         $guru = User::where('role', 'guru')->where('aktif', true)->orderBy('name')->get();
-        return view('ruang::pembagian', compact('kelasList', 'kelas', 'ta', 'ruang', 'mapel', 'guru'));
+        return Inertia::render('Ruang/Pembagian', [
+            'kelasList' => $kelasList->map(fn ($k) => $k->only('id', 'nama')),
+            'kelas' => $kelas?->only('id', 'nama'),
+            'tahunAjaran' => $ta?->label(),
+            'hari' => Jadwal::HARI,
+            'ruang' => $ruang->map(fn ($x) => [
+                'id' => $x->id, 'mapel_id' => $x->mapel_id, 'mapel' => $x->mapel->nama, 'guru_id' => $x->guru_id,
+                'jadwal' => $x->jadwal->map(fn ($j) => [
+                    'id' => $j->id, 'link_meet' => (bool) $j->link_meet,
+                    'waktu' => Jadwal::HARI[$j->hari] . ' ' . substr($j->jam_mulai, 0, 5) . '–' . substr($j->jam_selesai, 0, 5),
+                ]),
+            ]),
+            'mapelTersedia' => $mapel->whereNotIn('id', $ruang->pluck('mapel_id'))->map(fn ($m) => $m->only('id', 'nama'))->values(),
+            'guru' => $guru->map(fn ($g) => $g->only('id', 'name')),
+        ]);
     }
 
     public function simpan(Request $r)

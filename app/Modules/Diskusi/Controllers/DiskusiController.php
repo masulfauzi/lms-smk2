@@ -3,18 +3,31 @@
 namespace App\Modules\Diskusi\Controllers;
 
 use App\Http\Controllers\Controller;
-
 use App\Modules\Diskusi\Models\Diskusi;
 use App\Modules\Ruang\Models\Ruang;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class DiskusiController extends Controller
 {
-    public function index(Ruang $ruang)
+    public function index(Request $r, Ruang $ruang)
     {
-        $ruang->load('mapel', 'kelas', 'guru');
+        $u = $r->user();
         $topik = Diskusi::with(['user', 'balasan.user'])->where('ruang_id', $ruang->id)->whereNull('parent_id')->latest()->paginate(15);
-        return view('diskusi::index', compact('ruang', 'topik'));
+        $pesan = fn ($d) => [
+            'id' => $d->id,
+            'nama' => $d->user->name,
+            'inisial' => $d->user->inisial(),
+            'bukan_siswa' => $d->user->role !== 'siswa',
+            'guru' => $d->user->role === 'guru',
+            'waktu' => $d->created_at->locale('id')->diffForHumans(),
+            'isi_html' => teks($d->isi),
+            'boleh_hapus' => $d->user_id === $u->id || $u->role !== 'siswa',
+        ];
+        return Inertia::render('Diskusi/Index', [
+            'ruang' => $ruang->kepala(),
+            'topik' => $topik->through(fn ($d) => $pesan($d) + ['balasan' => $d->balasan->map($pesan)->values()]),
+        ]);
     }
 
     public function store(Request $r, Ruang $ruang)

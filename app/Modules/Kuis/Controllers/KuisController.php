@@ -3,13 +3,14 @@
 namespace App\Modules\Kuis\Controllers;
 
 use App\Http\Controllers\Controller;
-
 use App\Modules\Kuis\Models\Kuis;
 use App\Modules\Kuis\Models\Percobaan;
-use App\Modules\Ruang\Models\Ruang;
 use App\Modules\Kuis\Models\Soal;
+use App\Modules\Ruang\Models\Ruang;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
 
 class KuisController extends Controller
 {
@@ -24,18 +25,60 @@ class KuisController extends Controller
         $milikSaya = $u->role === 'siswa'
             ? Percobaan::where('siswa_id', $u->id)->whereIn('kuis_id', $kuis->pluck('id'))->get()->keyBy('kuis_id')
             : collect();
-        return view('kuis::index', compact('ruang', 'kuis', 'milikSaya'));
+        $siswa = $u->role === 'siswa';
+        $warna = ['draf' => '', 'belum' => 'biru', 'berlangsung' => 'hijau', 'selesai' => ''];
+        $label = ['draf' => 'Draf', 'belum' => 'Belum dibuka', 'berlangsung' => 'Dibuka', 'selesai' => 'Ditutup'];
+        return Inertia::render('Kuis/Index', [
+            'ruang' => $ruang->kepala(),
+            'kuis' => $kuis->map(function ($k) use ($siswa, $milikSaya, $warna, $label) {
+                $st = $k->status();
+                $p = $milikSaya[$k->id] ?? null;
+                $kerjakan = $st === 'berlangsung' && !$p?->selesai_at;
+                return [
+                    'id' => $k->id, 'judul' => $k->judul, 'berlangsung' => $st === 'berlangsung',
+                    'keterangan' => tgl($k->mulai, true) . ' – ' . tgl($k->selesai, true) . ' · ' . $k->durasi_menit . ' menit · ' . $k->soal_count . ' soal',
+                    'status' => [$warna[$st], $label[$st]],
+                    'hasil' => $siswa && $p?->selesai_at ? ($p->nilai !== null && $k->tampilkan_nilai ? 'Nilai ' . round($p->nilai) : 'Selesai') : null,
+                    'kerjakan' => $kerjakan,
+                    'selesai_count' => $k->selesai_count,
+                ];
+            }),
+        ]);
     }
 
     public function create(Ruang $ruang)
     {
-        $ruang->load('mapel', 'kelas');
         $kuis = new Kuis([
             'mulai' => today()->addDay()->setTime(7, 0),
             'selesai' => today()->addDay()->setTime(21, 0),
             'durasi_menit' => 60, 'acak_soal' => true, 'acak_opsi' => true, 'tampilkan_nilai' => true,
         ]);
-        return view('kuis::form', compact('ruang', 'kuis'));
+        return $this->form($ruang, $kuis);
+    }
+
+    /** Halaman form kuis: pengaturan, daftar soal, tambah/ubah soal, impor soal */
+    private function form(Ruang $ruang, Kuis $kuis, bool $sudahDikerjakan = false, ?Soal $ubahSoal = null)
+    {
+        $soal = $kuis->exists ? $kuis->soal : collect();
+        return Inertia::render('Kuis/Form', [
+            'ruang' => $ruang->kepala(),
+            'kuis' => [
+                'id' => $kuis->exists ? $kuis->id : null,
+                'judul' => $kuis->judul ?? '',
+                'petunjuk' => $kuis->petunjuk ?? '',
+                'mulai' => $kuis->mulai?->format('Y-m-d\TH:i'),
+                'selesai' => $kuis->selesai?->format('Y-m-d\TH:i'),
+                'durasi_menit' => $kuis->durasi_menit,
+                'acak_soal' => (bool) $kuis->acak_soal,
+                'acak_opsi' => (bool) $kuis->acak_opsi,
+                'tampilkan_nilai' => (bool) $kuis->tampilkan_nilai,
+                'terbit' => (bool) $kuis->terbit,
+            ],
+            'soal' => $soal->map(fn ($x) => $x->only('id', 'urutan', 'jenis', 'pertanyaan', 'opsi', 'kunci', 'bobot'))->values(),
+            'totalBobot' => $soal->sum('bobot'),
+            'sudahDikerjakan' => $sudahDikerjakan,
+            'ubahSoal' => $ubahSoal?->only('id', 'urutan', 'jenis', 'pertanyaan', 'opsi', 'kunci', 'bobot'),
+        ]);
     }
 
     public function store(Request $r, Ruang $ruang)
@@ -47,11 +90,10 @@ class KuisController extends Controller
     public function edit(Ruang $ruang, Kuis $kuis)
     {
         $this->milik($kuis, $ruang);
-        $ruang->load('mapel', 'kelas');
         $kuis->load('soal');
         $sudahDikerjakan = $kuis->percobaan()->exists();
         $ubahSoal = $kuis->soal->firstWhere('id', (int) request('soal'));
-        return view('kuis::form', compact('ruang', 'kuis', 'sudahDikerjakan', 'ubahSoal'));
+        return $this->form($ruang, $kuis, $sudahDikerjakan, $ubahSoal);
     }
 
     public function update(Request $r, Ruang $ruang, Kuis $kuis)
@@ -168,7 +210,22 @@ class KuisController extends Controller
         if ($u->role === 'siswa') {
             abort_unless($kuis->terbit, 404);
             $p = $this->tutupBilaHabis(Percobaan::where('kuis_id', $kuis->id)->where('siswa_id', $u->id)->first());
-            return view('kuis::siswa', compact('ruang', 'kuis', 'p'));
+            return Inertia::render('Kuis/Siswa', [
+                'ruang' => $ruang->kepala(),
+                'kuis' => [
+                    'id' => $kuis->id, 'judul' => $kuis->judul, 'status' => $kuis->status(),
+                    'jumlah_soal' => $kuis->soal->count(), 'durasi_menit' => $kuis->durasi_menit,
+                    'petunjuk_html' => $kuis->petunjuk ? teks($kuis->petunjuk) : null,
+                    'mulai' => tgl($kuis->mulai, true), 'selesai' => tgl($kuis->selesai, true),
+                ],
+                'percobaan' => $p ? [
+                    'selesai' => (bool) $p->selesai_at,
+                    'nilai' => $kuis->tampilkan_nilai && $p->nilai !== null ? rtrim(rtrim(number_format($p->nilai, 2, ',', ''), '0'), ',') : null,
+                    'menunggu' => $p->nilai === null,
+                    'tuntas' => $p->nilai !== null && $p->nilai >= $ruang->kkm,
+                    'keterangan' => $p->selesai_at ? 'Dikumpulkan ' . tgl($p->selesai_at, true) . ' · ' . count(array_filter($p->jawaban ?? [], fn ($v) => $v !== null && $v !== '')) . ' dari ' . count($p->urutan_soal['soal']) . ' soal dijawab' : null,
+                ] : null,
+            ]);
         }
 
         $siswa = $ruang->siswa()->get();
@@ -181,7 +238,48 @@ class KuisController extends Controller
             $sebaran = $selesai->countBy(fn ($p) => $p->jawaban[$s->id] ?? '-');
             $butir[$s->id] = ['persen' => $selesai->count() ? round($benar / $selesai->count() * 100) : null, 'sebaran' => $sebaran];
         }
-        return view('kuis::guru', compact('ruang', 'kuis', 'siswa', 'percobaan', 'butir'));
+        $selesaiSemua = $percobaan->whereNotNull('selesai_at');
+        $dinilai = $selesaiSemua->whereNotNull('nilai');
+        $st = $kuis->status();
+        $ada = $dinilai->count();
+        return Inertia::render('Kuis/Guru', [
+            'ruang' => $ruang->kepala(),
+            'kuis' => ['id' => $kuis->id, 'judul' => $kuis->judul, 'periode' => tgl($kuis->mulai, true) . ' – ' . tgl($kuis->selesai, true)],
+            'stat' => [
+                'status' => ['draf' => 'Draf', 'belum' => 'Belum dibuka', 'berlangsung' => 'Sedang dibuka', 'selesai' => 'Ditutup'][$st],
+                'mengumpulkan' => $selesaiSemua->count() . '/' . $siswa->count(),
+                'mengerjakan' => $percobaan->count() - $selesaiSemua->count(),
+                'rata' => $ada ? round($dinilai->avg('nilai'), 1) : '-',
+                'tertinggi' => $ada ? round($dinilai->max('nilai'), 1) : '-',
+                'terendah' => $ada ? round($dinilai->min('nilai'), 1) : '-',
+                'tuntas' => $dinilai->where('nilai', '>=', $ruang->kkm)->count(),
+                'menunggu' => $selesaiSemua->whereNull('nilai')->count(),
+            ],
+            'hasil' => $siswa->values()->map(function ($s) use ($percobaan, $st, $ruang) {
+                $p = $percobaan[$s->id] ?? null;
+                return [
+                    'id' => $s->id, 'nama' => $s->name, 'percobaan_id' => $p?->id,
+                    'status' => match (true) {
+                        !$p => [$st === 'selesai' ? 'merah' : '', $st === 'selesai' ? 'Tidak mengerjakan' : 'Belum'],
+                        !$p->selesai_at => ['biru', 'Mengerjakan'],
+                        $p->nilai === null => ['kuning', 'Perlu koreksi'],
+                        default => ['hijau', 'Selesai'],
+                    },
+                    'waktu' => $p?->selesai_at ? ((string) $p->mulai_at->diffInMinutes($p->selesai_at)) . ' menit' : '-',
+                    'nilai' => $p && $p->nilai !== null ? round($p->nilai, 1) : null,
+                    'rendah' => $p && $p->nilai !== null && $p->nilai < $ruang->kkm,
+                    'selesai' => (bool) $p?->selesai_at,
+                    'perlu_koreksi' => $p?->nilai === null,
+                ];
+            }),
+            'butir' => $kuis->soal->where('jenis', 'pg')->values()->map(fn ($x) => [
+                'id' => $x->id,
+                'judul' => $x->urutan . '. ' . Str::limit($x->pertanyaan, 50),
+                'pertanyaan' => $x->pertanyaan,
+                'persen' => $butir[$x->id]['persen'],
+                'sebaran' => $butir[$x->id]['sebaran']->sortKeys()->map(fn ($n, $h) => $h . ': ' . $n . ($h === $x->kunci ? ' (kunci)' : ''))->values(),
+            ]),
+        ]);
     }
 
     public function mulai(Request $r, Ruang $ruang, Kuis $kuis)
@@ -216,8 +314,21 @@ class KuisController extends Controller
         if ($p->selesai_at) return redirect()->route('kuis.show', [$ruang, $kuis]);
         $soal = $kuis->soal()->get()->keyBy('id');
         $daftar = collect($p->urutan_soal['soal'])->map(fn ($id) => $soal[$id] ?? null)->filter()->values();
-        $ruang->load('mapel', 'kelas');
-        return view('kuis::kerjakan', compact('ruang', 'kuis', 'p', 'daftar'));
+        return Inertia::render('Kuis/Kerjakan', [
+            'ruang' => $ruang->kepala(),
+            'kuis' => ['id' => $kuis->id, 'judul' => $kuis->judul],
+            'batas' => $p->batas_at->toIso8601String(),
+            'sekarangMs' => now()->getTimestampMs(),
+            'soal' => $daftar->map(fn ($x) => [
+                'id' => $x->id,
+                'jenis' => $x->jenis,
+                'pertanyaan' => $x->pertanyaan,
+                'opsi' => $x->jenis === 'pg'
+                    ? collect($p->urutan_soal['opsi'][$x->id] ?? array_keys($x->opsi))->map(fn ($h) => ['huruf' => $h, 'teks' => $x->opsi[$h]])->values()
+                    : [],
+                'jawaban' => $p->jawaban[$x->id] ?? null,
+            ]),
+        ]);
     }
 
     /** Simpan otomatis satu jawaban (dipanggil JavaScript setiap siswa memilih / mengetik) */
@@ -252,10 +363,26 @@ class KuisController extends Controller
     {
         $this->milik($kuis, $ruang);
         abort_unless($percobaan->kuis_id === $kuis->id, 404);
-        $ruang->load('mapel', 'kelas');
         $kuis->load('soal');
         $percobaan->load('siswa');
-        return view('kuis::koreksi', compact('ruang', 'kuis', 'percobaan'));
+        return Inertia::render('Kuis/Koreksi', [
+            'ruang' => $ruang->kepala(),
+            'kuis' => ['id' => $kuis->id, 'judul' => $kuis->judul],
+            'percobaan' => [
+                'id' => $percobaan->id, 'nama' => $percobaan->siswa->name,
+                'keterangan' => 'Dikumpulkan ' . tgl($percobaan->selesai_at, true) . ' · nilai saat ini ' . ($percobaan->nilai !== null ? round($percobaan->nilai, 1) : 'menunggu koreksi esai'),
+            ],
+            'soal' => $kuis->soal->map(function ($x) use ($percobaan) {
+                $j = $percobaan->jawaban[$x->id] ?? null;
+                return [
+                    'id' => $x->id, 'urutan' => $x->urutan, 'jenis' => $x->jenis, 'pertanyaan' => $x->pertanyaan, 'bobot' => $x->bobot, 'kunci' => $x->kunci,
+                    'jawaban_pg' => $x->jenis === 'pg' ? ($j ? $j . '. ' . ($x->opsi[$j] ?? '') : 'Tidak dijawab') : null,
+                    'benar' => $x->jenis === 'pg' && $j === $x->kunci,
+                    'jawaban_html' => $x->jenis === 'esai' && filled($j) ? teks($j) : null,
+                    'skor' => $percobaan->nilai_esai[$x->id] ?? '',
+                ];
+            }),
+        ]);
     }
 
     public function simpanKoreksi(Request $r, Ruang $ruang, Kuis $kuis, Percobaan $percobaan)

@@ -7,6 +7,7 @@ use App\Modules\Mapel\Models\Mapel;
 use App\Modules\Ruang\Models\Ruang;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 /** Data master mata pelajaran (satu form simpan untuk tambah & ubah) */
 class MapelController extends Controller
@@ -16,7 +17,10 @@ class MapelController extends Controller
         $daftar = Mapel::orderBy('kelompok')->orderBy('nama')->get();
         $dipakai = Ruang::selectRaw('mapel_id, count(*) n')->groupBy('mapel_id')->pluck('n', 'mapel_id');
         $ubah = $daftar->firstWhere('id', (int) $r->query('ubah'));
-        return view('mapel::index', compact('daftar', 'dipakai', 'ubah'));
+        return Inertia::render('Mapel/Index', [
+            'daftar' => $daftar->map(fn ($m) => $m->only('id', 'kode', 'nama', 'kelompok') + ['dipakai' => $dipakai[$m->id] ?? 0]),
+            'ubah' => $ubah?->only('id', 'kode', 'nama', 'kelompok'),
+        ]);
     }
 
     public function simpan(Request $r)

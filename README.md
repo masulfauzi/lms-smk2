@@ -45,7 +45,8 @@ Nilai akhir tiap mapel dihitung dari rata-rata tugas, kuis, dan persentase kehad
 - Pengumuman untuk semua, guru saja, siswa saja, atau kelas tertentu (bisa disematkan)
 
 **Teknis**
-- Laravel 12 standar: controller, model Eloquent, migration, seeder, Blade (tanpa Node.js/NPM)
+- Laravel 12 + Inertia.js 2 + Vue 3: controller & model Eloquent di server, halaman Vue di browser (tanpa API terpisah)
+- Hasil build tampilan (`public/build`) sudah ikut di repo, jadi server cukup PHP + Composer; Node.js hanya dibutuhkan untuk mengubah tampilan
 - Hak akses per peran dan per ruang belajar; siswa hanya bisa membuka kelasnya sendiri
 - Berkas materi/tugas disimpan di storage privat, hanya bisa diunduh oleh yang berhak
 - Validasi jenis & ukuran file, perlindungan CSRF, batas percobaan login
@@ -102,13 +103,14 @@ Bobot (bawaan 40/40/20) dan KKM diatur per ruang belajar; bila salah satu kompon
 
 ## Struktur proyek
 
-Aplikasi dibagi menjadi modul. Setiap modul punya folder sendiri berisi controller, model, view, dan route:
+Aplikasi dibagi menjadi modul. Setiap modul punya folder sendiri berisi controller, model, halaman Vue, dan route:
 
 ```
 app/Modules/<Modul>/
   Controllers/    App\Modules\<Modul>\Controllers\...
   Models/         App\Modules\<Modul>\Models\...
-  Views/          dipanggil dengan view('<modul>::nama')
+  Pages/          halaman Vue, dipanggil dengan Inertia::render('<Modul>/<Halaman>')
+  Components/     komponen Vue khusus modul (opsional)
   routes.php      route milik modul ini
 ```
 
@@ -132,14 +134,20 @@ Bagian bersama di luar modul:
 ```
 app/Http/Controllers/Controller.php   base controller: milik(), kirimBerkas()
 app/Http/Middleware/Role.php          cek akun aktif + peran, catat waktu terakhir aktif
-app/Providers/ModuleServiceProvider   mendaftarkan view tiap modul
+app/Http/Middleware/HandleInertiaRequests.php   data bersama semua halaman (user login, sekolah, flash)
 app/Support/Rapor.php                 perhitungan nilai & kehadiran per ruang
 app/helpers.php                       setting(), tgl(), sisa_waktu(), teks(), predikat(), icon()
 routes/web.php                        memuat semua app/Modules/*/routes.php
-resources/views/                      layouts/, partials/, errors/ (view bersama)
+resources/views/app.blade.php         root template Inertia (satu-satunya Blade selain halaman error)
+resources/views/errors/               halaman error untuk muat halaman penuh
+resources/js/app.js                   inisialisasi Inertia + Vue + Ziggy (route() Laravel di Vue)
+resources/js/Layouts/                 AppLayout (sidebar), GuestLayout
+resources/js/Components/              komponen bersama: Icon, Flash, Kosong, TombolAksi, TombolHapus, Paginasi
+resources/js/Pages/Error.vue          halaman error untuk navigasi Inertia
+resources/css/app.css                 seluruh gaya tampilan
+public/build/                         hasil npm run build (di-commit)
 database/migrations/                  tabel bawaan Laravel + 2026_10_27_0000NN_*.php (satu file per tabel LMS, urut sesuai FK)
 database/seeders/                     DatabaseSeeder: data contoh SMK
-public/css/app.css                    seluruh gaya tampilan (tanpa build tool)
 index.php                             penerus ke public/ agar bisa dibuka di http://localhost/<folder>
 ```
 
@@ -154,4 +162,12 @@ vendor/bin/pint                        # rapikan gaya kode
 php artisan optimize:clear             # bersihkan cache (termasuk cache pengaturan sekolah)
 ```
 
-Tidak memerlukan Node.js/NPM. Skrip `composer setup` dan `composer dev` di `composer.json` adalah sisa template Laravel dan memanggil `npm`; gunakan `setup.sh`/`setup.bat` atau perintah di atas.
+Untuk mengubah tampilan (file `.vue` / `.css`) perlu [Node.js](https://nodejs.org) 20+:
+
+```bash
+npm install                            # sekali saja
+npm run dev                            # mode pengembangan (jalankan bersama php artisan serve), perubahan langsung tampil
+npm run build                          # wajib sebelum commit: memperbarui public/build
+```
+
+`public/build` ikut di-commit supaya komputer sekolah/hosting tidak perlu Node.js. Matikan `npm run dev` (Ctrl+C) setelah selesai; selama berjalan, ia membuat file `public/hot` yang membuat halaman memuat aset dari server Vite.

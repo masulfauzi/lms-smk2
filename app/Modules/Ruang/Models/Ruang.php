@@ -61,6 +61,21 @@ class Ruang extends Model
         return $this->mapel->nama . ' · ' . $this->kelas->nama;
     }
 
+    /** Props header ruang belajar untuk komponen Vue RuangKepala (dipakai halaman di beberapa modul) */
+    public function kepala(): array
+    {
+        $this->loadMissing('mapel', 'kelas', 'guru');
+        return [
+            'id' => $this->id,
+            'judul' => $this->judul(),
+            'mapel' => $this->mapel->nama,
+            'kelas' => $this->kelas->nama,
+            'guru' => $this->guru?->name,
+            'kkm' => $this->kkm,
+            'warna' => $this->warna(),
+        ];
+    }
+
     /** Warna kartu tetap per mapel (dari palet terbatas) */
     public function warna(): string
     {

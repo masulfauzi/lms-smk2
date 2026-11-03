@@ -7,13 +7,20 @@ use App\Modules\Sekolah\Models\Pengaturan;
 use App\Modules\Sekolah\Models\TahunAjaran;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class SekolahController extends Controller
 {
     public function index()
     {
         $tahun = TahunAjaran::withCount('ruang')->orderByDesc('nama')->orderByDesc('semester')->get();
-        return view('sekolah::index', compact('tahun'));
+        return Inertia::render('Sekolah/Index', [
+            'profil' => collect(['nama_sekolah', 'jenjang', 'npsn', 'kkm', 'alamat', 'kepala_sekolah'])->mapWithKeys(fn ($k) => [$k => setting($k)]),
+            'tahun' => $tahun->map(fn ($t) => [
+                'id' => $t->id, 'nama' => $t->nama, 'semester' => $t->semester, 'label' => $t->label(),
+                'aktif' => (bool) $t->aktif, 'ruang_count' => $t->ruang_count,
+            ]),
+        ]);
     }
 
     public function simpan(Request $r)

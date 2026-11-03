@@ -3,10 +3,10 @@
 namespace App\Modules\Pengumuman\Controllers;
 
 use App\Http\Controllers\Controller;
-
 use App\Modules\Kelas\Models\Kelas;
 use App\Modules\Pengumuman\Models\Pengumuman;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class PengumumanController extends Controller
 {
@@ -19,7 +19,18 @@ class PengumumanController extends Controller
             'guru' => Kelas::whereIn('id', $u->ruangQuery()->pluck('kelas_id'))->orderBy('tingkat')->orderBy('nama')->get(),
             default => collect(),
         };
-        return view('pengumuman::index', compact('daftar', 'kelas'));
+        $sasaran = ['semua' => 'Semua warga sekolah', 'guru' => 'Guru', 'siswa' => 'Semua siswa'];
+        return Inertia::render('Pengumuman/Index', [
+            'daftar' => $daftar->through(fn ($p) => [
+                'id' => $p->id,
+                'judul' => $p->judul,
+                'disematkan' => (bool) $p->disematkan,
+                'keterangan' => $p->user->name . ' · ' . tgl($p->created_at, true) . ' · ' . ($p->kelas ? 'Kelas ' . $p->kelas->nama : $sasaran[$p->sasaran]),
+                'isi_html' => teks($p->isi),
+                'boleh_hapus' => $u->role === 'admin' || $p->user_id === $u->id,
+            ]),
+            'kelas' => $kelas->map(fn ($k) => ['id' => $k->id, 'nama' => $k->nama])->values(),
+        ]);
     }
 
     public function store(Request $r)

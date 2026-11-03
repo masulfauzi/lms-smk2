@@ -3,13 +3,13 @@
 namespace App\Modules\Ruang\Controllers;
 
 use App\Http\Controllers\Controller;
-
-use App\Modules\Ruang\Models\Jadwal;
 use App\Modules\Pertemuan\Models\Pertemuan;
 use App\Modules\Pertemuan\Models\Presensi;
+use App\Modules\Ruang\Models\Jadwal;
 use App\Modules\Ruang\Models\Ruang;
 use App\Support\Rapor;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class RuangController extends Controller
 {
@@ -19,7 +19,14 @@ class RuangController extends Controller
         $q = $u->ruangQuery()->with('mapel', 'kelas', 'guru')->withCount('pertemuan');
         if ($u->role === 'admin' && $r->filled('kelas')) $q->where('kelas_id', $r->query('kelas'));
         $ruang = $q->get()->sortBy(fn ($x) => sprintf('%02d%s%s', $x->kelas->tingkat, $x->kelas->nama, $x->mapel->nama))->values();
-        return view('ruang::index', compact('ruang'));
+        return Inertia::render('Ruang/Index', [
+            'kelasList' => $u->role === 'admin' ? \App\Modules\Kelas\Models\Kelas::orderBy('tingkat')->orderBy('nama')->get()->map(fn ($k) => $k->only('id', 'nama')) : [],
+            'kelasId' => $r->query('kelas', ''),
+            'ruang' => $ruang->map(fn ($x) => [
+                'id' => $x->id, 'mapel' => $x->mapel->nama, 'warna' => $x->warna(), 'pertemuan_count' => $x->pertemuan_count,
+                'keterangan' => $u->role === 'siswa' ? ($x->guru?->name ?? '-') : $x->kelas->nama . ' · ' . ($x->guru?->name ?? 'Belum ada guru'),
+            ]),
+        ]);
     }
 
     /** Halaman utama ruang: daftar pertemuan (materi) dari terbaru */
@@ -38,14 +45,57 @@ class RuangController extends Controller
             $selesaiSaya = \DB::table('materi_selesai')->where('siswa_id', $u->id)->whereIn('pertemuan_id', $pertemuan->pluck('id'))->pluck('pertemuan_id')->flip();
         }
         $jumlahSiswa = $ruang->siswa()->count();
-        return view('ruang::show', compact('ruang', 'pertemuan', 'presensiSaya', 'selesaiSaya', 'jumlahSiswa'));
+        $siswa = $u->role === 'siswa';
+        return Inertia::render('Ruang/Show', [
+            'ruang' => $ruang->kepala(),
+            'deskripsi_html' => $ruang->deskripsi ? teks($ruang->deskripsi) : null,
+            'jadwal' => $ruang->jadwal->map(fn ($j) => [
+                'id' => $j->id,
+                'waktu' => Jadwal::HARI[$j->hari] . ', ' . substr($j->jam_mulai, 0, 5) . '–' . substr($j->jam_selesai, 0, 5),
+                'link_meet' => $j->link_meet,
+                'link_pendek' => $j->link_meet ? \Illuminate\Support\Str::limit($j->link_meet, 40) : null,
+            ]),
+            'pertemuan' => $pertemuan->map(function ($p) use ($siswa, $presensiSaya, $selesaiSaya, $jumlahSiswa) {
+                $presensi = null;
+                if ($p->presensi_buka) {
+                    if ($siswa) {
+                        $st = $presensiSaya[$p->id] ?? null;
+                        $presensi = match (true) {
+                            (bool) $st => [$st === 'hadir' ? 'hijau' : ($st === 'alpa' ? 'merah' : 'biru'), Presensi::STATUS[$st], false],
+                            $p->presensiTerbuka() => ['hijau', 'Presensi dibuka s.d. ' . $p->presensi_tutup->format('H.i'), false],
+                            now()->lt($p->presensi_buka) => ['', 'Presensi ' . $p->presensi_buka->format('H.i'), false],
+                            default => ['merah', 'Tidak presensi', false],
+                        };
+                    } else {
+                        $presensi = [$p->presensiTerbuka() ? 'hijau' : '', 'Hadir ' . $p->hadir_count . '/' . $jumlahSiswa, true];
+                    }
+                }
+                return [
+                    'id' => $p->id, 'urutan' => $p->urutan, 'judul' => $p->judul, 'tanggal' => tgl_panjang($p->tanggal),
+                    'terbit' => (bool) $p->terbit, 'video' => (bool) $p->video_url, 'lampiran' => (bool) $p->lampiran_path,
+                    'presensi' => $presensi ? ['kelas' => $presensi[0], 'label' => $presensi[1], 'ikon' => $presensi[2]] : null,
+                    'beres' => $siswa && isset($selesaiSaya[$p->id]),
+                ];
+            }),
+        ]);
     }
 
     public function anggota(Ruang $ruang)
     {
         $ruang->load('mapel', 'kelas.wali', 'guru');
         $siswa = $ruang->siswa()->get();
-        return view('ruang::anggota', compact('ruang', 'siswa'));
+        $wali = $ruang->kelas->wali;
+        return Inertia::render('Ruang/Anggota', [
+            'ruang' => $ruang->kepala(),
+            'siswa' => $siswa->map(fn ($s) => [
+                'id' => $s->id, 'name' => $s->name, 'username' => $s->username, 'jk' => $s->jk,
+                'terakhir_aktif' => $s->terakhir_aktif_at ? $s->terakhir_aktif_at->locale('id')->diffForHumans() : 'Belum pernah',
+            ]),
+            'pengajar' => [
+                'guru' => ['nama' => $ruang->guru?->name ?? 'Belum ditentukan', 'inisial' => $ruang->guru?->inisial() ?? '?'],
+                'wali' => $wali ? ['nama' => $wali->name, 'inisial' => $wali->inisial()] : null,
+            ],
+        ]);
     }
 
     /** Rekap presensi: siswa x pertemuan */
@@ -57,7 +107,26 @@ class RuangController extends Controller
         $siswa = $u->role === 'siswa' ? collect([$u]) : $ruang->siswa()->get();
         $data = Presensi::whereIn('pertemuan_id', $pertemuan->pluck('id'))->whereIn('siswa_id', $siswa->pluck('id'))->get()
             ->groupBy('siswa_id')->map(fn ($g) => $g->keyBy('pertemuan_id'));
-        return view('ruang::presensi', compact('ruang', 'pertemuan', 'siswa', 'data'));
+        $baris = $siswa->values()->map(function ($s) use ($pertemuan, $data) {
+            $sel = [];
+            $h = $is = $a = 0;
+            foreach ($pertemuan as $p) {
+                $st = $data[$s->id][$p->id]->status ?? null;
+                if (!$st && $p->presensi_tutup && $p->presensi_tutup->isPast()) $st = 'alpa';
+                if ($st === 'hadir') $h++;
+                elseif ($st === 'izin' || $st === 'sakit') $is++;
+                elseif ($st === 'alpa') $a++;
+                $sel[] = $st;
+            }
+            $wajib = $h + $a;
+            return ['id' => $s->id, 'nama' => $s->name, 'sel' => $sel, 'h' => $h, 'is' => $is, 'a' => $a, 'persen' => $wajib ? round($h / $wajib * 100) : null];
+        });
+        return Inertia::render('Ruang/Presensi', [
+            'ruang' => $ruang->kepala(),
+            'status' => Presensi::STATUS,
+            'pertemuan' => $pertemuan->map(fn ($p) => ['id' => $p->id, 'urutan' => $p->urutan, 'judul' => $p->judul, 'tanggal' => $p->tanggal->format('d/m')]),
+            'baris' => $baris,
+        ]);
     }
 
     public function nilai(Request $r, Ruang $ruang)
@@ -67,7 +136,19 @@ class RuangController extends Controller
         if ($r->user()->role === 'siswa') {
             $rapor['baris'] = array_values(array_filter($rapor['baris'], fn ($b) => $b['siswa']->id === $r->user()->id));
         }
-        return view('ruang::nilai', compact('ruang', 'rapor'));
+        $baris = array_map(fn ($b) => [
+            'id' => $b['siswa']->id, 'nama' => $b['siswa']->name,
+            'tugas' => array_values($b['tugas']), 'kuis' => array_values($b['kuis']),
+            'rata_tugas' => $b['rata_tugas'], 'rata_kuis' => $b['rata_kuis'], 'persen_hadir' => $b['persen_hadir'],
+            'hadir' => $b['hadir'], 'alpa' => $b['alpa'], 'akhir' => $b['akhir'], 'predikat' => predikat($b['akhir']),
+        ], $rapor['baris']);
+        return Inertia::render('Ruang/Nilai', [
+            'ruang' => $ruang->kepala(),
+            'bobot' => $ruang->only('bobot_tugas', 'bobot_kuis', 'bobot_kehadiran', 'kkm'),
+            'tugas' => $rapor['tugas']->map(fn ($t) => ['id' => $t->id, 'judul' => $t->judul, 'tenggat' => tgl($t->tenggat)])->values(),
+            'kuis' => $rapor['kuis']->map(fn ($k) => ['id' => $k->id, 'judul' => $k->judul, 'tanggal' => tgl($k->mulai), 'tampilkan_nilai' => (bool) $k->tampilkan_nilai])->values(),
+            'baris' => $baris,
+        ]);
     }
 
     public function nilaiCsv(Ruang $ruang)
@@ -99,7 +180,14 @@ class RuangController extends Controller
     public function pengaturan(Ruang $ruang)
     {
         $ruang->load('mapel', 'kelas', 'jadwal');
-        return view('ruang::pengaturan', compact('ruang'));
+        return Inertia::render('Ruang/Pengaturan', [
+            'ruang' => $ruang->kepala(),
+            'pengaturan' => $ruang->only('deskripsi', 'kkm', 'bobot_tugas', 'bobot_kuis', 'bobot_kehadiran'),
+            'jadwal' => $ruang->jadwal->map(fn ($j) => [
+                'id' => $j->id, 'link_meet' => $j->link_meet,
+                'waktu' => Jadwal::HARI[$j->hari] . ', ' . substr($j->jam_mulai, 0, 5) . '–' . substr($j->jam_selesai, 0, 5),
+            ]),
+        ]);
     }
 
     public function simpanPengaturan(Request $r, Ruang $ruang)
