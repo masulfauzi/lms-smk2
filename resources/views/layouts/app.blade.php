@@ -20,7 +20,7 @@
   <aside class="sisi" onclick="if(event.target.closest('a'))document.body.classList.remove('menu-buka')">
     <div class="merek">
       <div class="logo">{!! icon('school', 22) !!}</div>
-      <div><b>{{ setting('nama_sekolah') }}</b><small>LMS PJJ · {{ \App\Models\TahunAjaran::aktif()?->label() ?? 'TA belum diatur' }}</small></div>
+      <div><b>{{ setting('nama_sekolah') }}</b><small>LMS PJJ · {{ \App\Modules\Sekolah\Models\TahunAjaran::aktif()?->label() ?? 'TA belum diatur' }}</small></div>
     </div>
     <a href="{{ route('home') }}" class="nav {{ request()->routeIs('home') ? 'on' : '' }}">{!! icon('home') !!}Beranda</a>
     <a href="{{ route('ruang') }}" class="nav {{ request()->routeIs('ruang*', 'pertemuan.*', 'tugas.*', 'kuis.*') ? 'on' : '' }}">{!! icon('book') !!}{{ $u->role === 'admin' ? 'Semua Ruang Belajar' : 'Ruang Belajar' }}</a>
@@ -45,7 +45,7 @@
     <div class="bawah">
       <a href="{{ route('profil') }}" class="akun" style="text-decoration:none">
         <span class="avatar">{{ $u->inisial() }}</span>
-        <span style="min-width:0"><b class="potong">{{ $u->name }}</b><small>{{ \App\Models\User::ROLES[$u->role] }}{{ $u->kelas ? ' · ' . $u->kelas->nama : '' }}</small></span>
+        <span style="min-width:0"><b class="potong">{{ $u->name }}</b><small>{{ \App\Modules\Pengguna\Models\User::ROLES[$u->role] }}{{ $u->kelas ? ' · ' . $u->kelas->nama : '' }}</small></span>
       </a>
       <form method="post" action="{{ route('logout') }}">@csrf<button class="btn garis kecil">{!! icon('logout', 16) !!}Keluar</button></form>
     </div>

@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
-use App\Models\Kuis;
-use App\Models\Percobaan;
-use App\Models\Pengumpulan;
-use App\Models\Pertemuan;
-use App\Models\Presensi;
-use App\Models\Ruang;
-use App\Models\Tugas;
+use App\Modules\Kuis\Models\Kuis;
+use App\Modules\Kuis\Models\Percobaan;
+use App\Modules\Pertemuan\Models\Pertemuan;
+use App\Modules\Pertemuan\Models\Presensi;
+use App\Modules\Ruang\Models\Ruang;
+use App\Modules\Tugas\Models\Pengumpulan;
+use App\Modules\Tugas\Models\Tugas;
 
 /**
  * Rekap nilai satu ruang belajar.

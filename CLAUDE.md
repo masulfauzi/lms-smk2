@@ -25,6 +25,31 @@ Akun demo (seeder): `admin/admin123`, `guru/guru123`, `siswa/siswa123`; akun lai
 
 Tidak ada Vite/build step. Semua CSS di `public/css/app.css`, JS inline di Blade, ikon SVG Lucide inline lewat `icon('nama')` di `app/helpers.php` (tambahkan path baru ke array di sana). Jangan menambahkan `@vite`, npm, atau framework CSS. Skrip `composer setup`/`composer dev` memanggil npm: sisa template, jangan dipakai.
 
+## Struktur modular
+
+Kode aplikasi ada di `app/Modules/<Modul>/` (Auth, Dashboard, Sekolah, Jurusan, Mapel, Kelas, Pengguna, Ruang, Pertemuan, Tugas, Kuis, Diskusi, Pengumuman, Rekap). Tiap modul:
+
+```
+app/Modules/Kuis/
+  Controllers/KuisController.php   namespace App\Modules\Kuis\Controllers, extends App\Http\Controllers\Controller
+  Models/Kuis.php, Soal.php, ...   namespace App\Modules\Kuis\Models
+  Views/form.blade.php, ...        view('kuis::form'), @include('kuis::...')
+  routes.php                       route modul ini
+```
+
+- **Jangan** membuat file di `app/Models`, `app/Http/Controllers` (selain base `Controller.php`), atau `resources/views/<fitur>`: folder lama itu sudah tidak dipakai.
+- Model ditaruh di modul pemiliknya (lihat tabel di README). Modul lain boleh memakainya lewat `use App\Modules\<Pemilik>\Models\X;`. Contoh: `User` ada di `Pengguna`, `Ruang` dan `Jadwal` ada di `Ruang`, `TahunAjaran` dan `Pengaturan` ada di `Sekolah`.
+- Namespace view = nama folder modul huruf kecil (`ModuleServiceProvider`). View bersama tetap global: `layouts.app`, `partials.flash|kosong|hapus|paginasi`, `errors.*`. Header ruang ada di `ruang::_kepala`.
+- `routes/web.php` hanya me-`require` semua `app/Modules/*/routes.php` (urutan abjad). Nama route global, jadi tetap unik lintas modul (`kuis.edit`, `admin.jurusan`, ...).
+- **Middleware route**: tulis semua middleware grup dalam **satu** array, misalnya `Route::middleware(['auth', 'role', 'can:akses,ruang'])->prefix('ruang/{ruang}')`. Memanggil `->middleware()` dua kali pada satu rantai *menimpa* middleware sebelumnya, sehingga `auth` bisa hilang. Di dalam closure grup, `->middleware()` bertingkat aman.
+- Migration, seeder, dan factory tetap terpusat di `database/` (satu migration LMS saling ber-FK).
+
+**Membuat modul baru** (`app/Modules/Contoh`):
+1. Buat `Controllers/`, `Models/`, `Views/`, dan `routes.php` dengan namespace `App\Modules\Contoh\...`.
+2. Di `routes.php`, bungkus route dengan `Route::middleware(['auth', 'role', ...])` (tambahkan `'can:akses,ruang'` + prefix `ruang/{ruang}` untuk fitur di dalam ruang, atau `'role:admin'` + `prefix('admin')->name('admin.')` untuk fitur admin).
+3. Panggil view dengan `view('contoh::nama')`. View otomatis terdaftar, tanpa registrasi tambahan.
+4. Jalankan `composer dump-autoload` dan `php artisan optimize:clear`, lalu cek dengan `php artisan route:list`.
+
 ## Arsitektur
 
 **Ruang belajar (`Ruang`)** adalah pusat domain: 1 mapel × 1 kelas × 1 tahun ajaran, diampu 1 guru (`guru_id`). Di dalamnya ada `Jadwal`, `Pertemuan` (materi + presensi), `Tugas` → `Pengumpulan`, `Kuis` → `Soal` & `Percobaan`, `Diskusi`. Siswa masuk ruang lewat `users.kelas_id`; `Ruang::siswa()` = siswa aktif di kelas tsb.
@@ -41,7 +66,7 @@ Tidak ada Vite/build step. Semua CSS di `public/css/app.css`, JS inline di Blade
 2. Route di bawah `ruang/{ruang}/...` memakai `can:akses,ruang` (Gate di `AppServiceProvider` → `User::bolehAkses()`: admin semua, guru ruang yang diampu, siswa ruang kelasnya).
 3. Setiap model anak yang di-bind bersama `{ruang}` **harus** dicek dengan `$this->milik($model, $ruang)` (base `Controller`) agar ID dari ruang lain tidak bisa diakses.
 4. Siswa tidak boleh melihat konten belum terbit (`pertemuan.terbit`, `kuis.terbit`) dan hanya boleh mengakses pengumpulan miliknya.
-5. Berkas disimpan di disk `local` (storage privat, `storage/app/private`) dengan path `materi/ruang-{id}`, `soal-tugas/ruang-{id}`, `tugas/{tugas_id}`. Unduhan **hanya** lewat `BerkasController` (cek akses), jangan lewat `storage/` publik. Validasi upload: maks 20 MB, `extensions` + `mimes` pdf,doc,docx,ppt,pptx,xls,xlsx,jpg,jpeg,png,zip,txt (lihat konstanta di `PertemuanController`/`TugasController`).
+5. Berkas disimpan di disk `local` (storage privat, `storage/app/private`) dengan path `materi/ruang-{id}`, `soal-tugas/ruang-{id}`, `tugas/{tugas_id}`. Unduhan **hanya** lewat method controller yang mengecek akses lalu memanggil `$this->kirimBerkas()` (base `Controller`): `PertemuanController::berkas`, `TugasController::berkas` / `berkasKumpulan`. Jangan lewat `storage/` publik. Validasi upload: maks 20 MB, `extensions` + `mimes` pdf,doc,docx,ppt,pptx,xls,xlsx,jpg,jpeg,png,zip,txt (lihat konstanta di `PertemuanController`/`TugasController`).
 6. Teks bebas dari pengguna dirender dengan `{!! teks($s) !!}` (meng-escape lalu mengubah URL, `**tebal**`, paragraf). Jangan `{!! !!}` untuk input mentah.
 7. Login dibatasi `throttle:10,1`; akun demo di halaman login disembunyikan saat `APP_ENV=production`.
 
@@ -50,8 +75,8 @@ Tidak ada Vite/build step. Semua CSS di `public/css/app.css`, JS inline di Blade
 - Nama tabel singular Bahasa Indonesia (`kelas`, `ruang`, `tugas`, `kuis`, `pengumuman`, ...), jadi setiap model mendefinisikan `protected $table`.
 - Skema LMS ada di satu migration `database/migrations/2026_10_27_000001_create_lms_tables.php`. Untuk perubahan skema, buat migration baru (jangan ubah yang lama bila sudah ada data nyata) lalu perbarui `DatabaseSeeder` bila perlu.
 - Seeder deterministik (`mt_srand(2026)`) dan tanggalnya relatif terhadap `now()`: pertahankan agar demo selalu terlihat "hidup".
-- Controller admin di `App\Http\Controllers\Admin\*`, route admin berprefiks `admin.`. Validasi inline dengan `$r->validate()` (belum memakai FormRequest), pesan error Bahasa Indonesia.
-- View per modul di `resources/views/<modul>/`; potongan bersama di `partials/` (`flash`, `kosong`, `hapus`, `paginasi`, `ruang-kepala`); layout `layouts/app.blade.php`. Paginator memakai `partials.paginasi`.
+- Fitur admin ada di modulnya masing-masing (mis. `Jurusan`, `Rekap`, `Ruang\Controllers\PembagianController`), route admin berprefiks URL `admin/` dan nama `admin.`. Validasi inline dengan `$r->validate()` (belum memakai FormRequest), pesan error Bahasa Indonesia.
+- Layout `layouts/app.blade.php`; paginator memakai `partials.paginasi`.
 - Helper global (`app/helpers.php`, autoload via composer `files`): `setting`, `tgl`, `tgl_panjang`, `sisa_waktu`, `teks`, `predikat`, `icon`. Format tanggal Indonesia via `tgl()`, jangan format manual.
 - Timezone `Asia/Jakarta`, locale `id`. Menurut `.env.example`, session & cache memakai driver `file` dan queue `database`.
 - Gaya kode ringkas (variabel pendek seperti `$r`, `$u`, `$p`), ikuti gaya file yang sedang diedit.

@@ -102,20 +102,45 @@ Bobot (bawaan 40/40/20) dan KKM diatur per ruang belajar; bila salah satu kompon
 
 ## Struktur proyek
 
+Aplikasi dibagi menjadi modul. Setiap modul punya folder sendiri berisi controller, model, view, dan route:
+
 ```
-app/
-  Http/Controllers/          Auth, Dashboard, Ruang, Pertemuan, Tugas, Kuis, Diskusi, Pengumuman, Berkas
-  Http/Controllers/Admin/    Sekolah, Master (jurusan/mapel/kelas), Pengguna, Ruang (pembagian & jadwal), Rekap
-  Http/Middleware/Role.php   cek akun aktif + peran, catat waktu terakhir aktif
-  Models/                    model Eloquent (nama tabel Bahasa Indonesia, singular)
-  Support/Rapor.php          perhitungan nilai & kehadiran per ruang
-  helpers.php                setting(), tgl(), sisa_waktu(), teks(), predikat(), icon()
-database/migrations/         tabel bawaan Laravel + 2026_10_27_000001_create_lms_tables.php (semua tabel LMS)
-database/seeders/            DatabaseSeeder: data contoh SMK
-resources/views/             Blade per modul (admin, dashboard, ruang, pertemuan, tugas, kuis, ...) + partials/
-public/css/app.css           seluruh gaya tampilan (tanpa build tool)
-routes/web.php               semua rute aplikasi
-index.php                    penerus ke public/ agar bisa dibuka di http://localhost/<folder>
+app/Modules/<Modul>/
+  Controllers/    App\Modules\<Modul>\Controllers\...
+  Models/         App\Modules\<Modul>\Models\...
+  Views/          dipanggil dengan view('<modul>::nama')
+  routes.php      route milik modul ini
+```
+
+| Modul | Isi |
+|---|---|
+| `Auth` | login, logout, profil & ganti password |
+| `Dashboard` | beranda per peran, jadwal mingguan |
+| `Sekolah` | data sekolah, jenjang, tahun ajaran (model `Pengaturan`, `TahunAjaran`) |
+| `Jurusan`, `Mapel`, `Kelas` | data master |
+| `Pengguna` | data guru & siswa, impor CSV, reset password (model `User`) |
+| `Ruang` | ruang belajar, anggota, rekap presensi & nilai per ruang, pengaturan; pembagian mengajar & jadwal (model `Ruang`, `Jadwal`) |
+| `Pertemuan` | materi, presensi daring, unduh lampiran materi (model `Pertemuan`, `Presensi`) |
+| `Tugas` | tugas, pengumpulan, penilaian, unduh berkas (model `Tugas`, `Pengumpulan`) |
+| `Kuis` | kuis, soal, percobaan, koreksi esai (model `Kuis`, `Soal`, `Percobaan`) |
+| `Diskusi` | tanya jawab per ruang |
+| `Pengumuman` | pengumuman sekolah/kelas |
+| `Rekap` | rekap presensi bulanan, leger nilai, keaktifan siswa (admin) |
+
+Bagian bersama di luar modul:
+
+```
+app/Http/Controllers/Controller.php   base controller: milik(), kirimBerkas()
+app/Http/Middleware/Role.php          cek akun aktif + peran, catat waktu terakhir aktif
+app/Providers/ModuleServiceProvider   mendaftarkan view tiap modul
+app/Support/Rapor.php                 perhitungan nilai & kehadiran per ruang
+app/helpers.php                       setting(), tgl(), sisa_waktu(), teks(), predikat(), icon()
+routes/web.php                        memuat semua app/Modules/*/routes.php
+resources/views/                      layouts/, partials/, errors/ (view bersama)
+database/migrations/                  tabel bawaan Laravel + 2026_10_27_000001_create_lms_tables.php (semua tabel LMS)
+database/seeders/                     DatabaseSeeder: data contoh SMK
+public/css/app.css                    seluruh gaya tampilan (tanpa build tool)
+index.php                             penerus ke public/ agar bisa dibuka di http://localhost/<folder>
 ```
 
 ## Pengembangan

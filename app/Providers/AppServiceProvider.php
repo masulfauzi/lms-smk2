@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\Ruang;
-use App\Models\User;
+use App\Modules\Pengguna\Models\User;
+use App\Modules\Ruang\Models\Ruang;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;

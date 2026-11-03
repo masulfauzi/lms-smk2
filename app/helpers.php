@@ -5,7 +5,7 @@ use Illuminate\Support\Carbon;
 if (! function_exists('setting')) {
     function setting(string $k): string
     {
-        return \App\Models\Pengaturan::ambil($k);
+        return \App\Modules\Sekolah\Models\Pengaturan::ambil($k);
     }
 }
 
