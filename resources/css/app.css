@@ -260,6 +260,8 @@ tbody tr:hover td { background: #fffbea; }
 /* Matriks presensi / nilai */
 .matriks td, .matriks th { padding: 8px 10px; text-align: center; }
 .matriks td:first-child, .matriks th:first-child, .matriks td:nth-child(2), .matriks th:nth-child(2) { text-align: left; }
+/* Kolom nomor urut: selebar isinya dan tidak pernah terpecah ke 2 baris */
+td.no, th.no, .matriks td.no, .matriks th.no { white-space: nowrap; width: 1%; text-align: right; font-variant-numeric: tabular-nums; }
 .sel { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700; }
 .sel.h { background: var(--hijau-lembut); color: var(--hijau); }
 .sel.i { background: var(--biru-lembut); color: #3767c9; }

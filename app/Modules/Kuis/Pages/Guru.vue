@@ -26,9 +26,9 @@ defineProps({ ruang: Object, kuis: Object, stat: Object, hasil: Array, butir: Ar
             <div class="kartu rapat">
                 <h2><Icon name="users" :size="18" />Hasil per siswa</h2>
                 <div class="tabel-wrap mt"><table>
-                    <thead><tr><th>No</th><th>Nama</th><th>Status</th><th>Waktu</th><th class="angka">Nilai</th><th /></tr></thead>
+                    <thead><tr><th class="no">No</th><th>Nama</th><th>Status</th><th>Waktu</th><th class="angka">Nilai</th><th /></tr></thead>
                     <tbody>
-                        <tr v-for="(s, i) in hasil" :key="s.id"><td>{{ i + 1 }}</td><td class="tebal">{{ s.nama }}</td>
+                        <tr v-for="(s, i) in hasil" :key="s.id"><td class="no">{{ i + 1 }}</td><td class="tebal">{{ s.nama }}</td>
                             <td><span :class="['lencana', s.status[0]]">{{ s.status[1] }}</span></td>
                             <td class="kecil-redup">{{ s.waktu }}</td>
                             <td :class="['angka tebal', s.rendah ? 'n-rendah' : '']">{{ s.nilai ?? '-' }}</td>

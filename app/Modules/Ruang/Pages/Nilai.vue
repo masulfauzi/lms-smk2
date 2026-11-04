@@ -45,12 +45,12 @@ const rendah = (n) => (n !== null && n < props.bobot.kkm ? 'n-rendah' : '');
                 <span class="kanan"><a class="btn kecil garis" :href="route('ruang.nilai.csv', ruang.id)"><Icon name="download" :size="14" />Unduh CSV</a></span></h2>
             <p class="kecil-redup" style="padding:4px 20px 0">Bobot: tugas {{ bobot.bobot_tugas }}%, kuis {{ bobot.bobot_kuis }}%, kehadiran {{ bobot.bobot_kehadiran }}% · KKM {{ bobot.kkm }}. Ubah di tab Pengaturan.</p>
             <div class="tabel-wrap mt"><table class="matriks">
-                <thead><tr><th>No</th><th>Nama</th>
+                <thead><tr><th class="no">No</th><th>Nama</th>
                     <th v-for="(t, i) in tugas" :key="'t' + t.id" :title="t.judul"><Link :href="route('tugas.show', [ruang.id, t.id])">T{{ i + 1 }}</Link></th>
                     <th v-for="(k, i) in kuis" :key="'k' + k.id" :title="k.judul"><Link :href="route('kuis.show', [ruang.id, k.id])">K{{ i + 1 }}</Link></th>
                     <th>Rata T</th><th>Rata K</th><th>% Hadir</th><th>Akhir</th><th>Pred.</th></tr></thead>
                 <tbody>
-                    <tr v-for="(s, i) in baris" :key="s.id"><td>{{ i + 1 }}</td><td class="tebal" style="white-space:nowrap">{{ s.nama }}</td>
+                    <tr v-for="(s, i) in baris" :key="s.id"><td class="no">{{ i + 1 }}</td><td class="tebal" style="white-space:nowrap">{{ s.nama }}</td>
                         <td v-for="(n, j) in s.tugas" :key="'t' + j" :class="rendah(n)">{{ n ?? '·' }}</td>
                         <td v-for="(n, j) in s.kuis" :key="'k' + j" :class="rendah(n)">{{ n === null ? '·' : Math.round(n) }}</td>
                         <td>{{ s.rata_tugas ?? '-' }}</td><td>{{ s.rata_kuis ?? '-' }}</td><td>{{ s.persen_hadir ?? '-' }}</td>

@@ -17,9 +17,9 @@ const bukanSiswa = computed(() => usePage().props.auth.user.role !== 'siswa');
             <div class="kartu rapat">
                 <h2><Icon name="users" :size="18" />Siswa kelas {{ ruang.kelas }} <span class="kanan kecil-redup">{{ siswa.length }} siswa</span></h2>
                 <div class="tabel-wrap mt"><table>
-                    <thead><tr><th>No</th><th>Nama</th><th>NISN</th><th>L/P</th><th v-if="bukanSiswa">Terakhir aktif</th></tr></thead>
+                    <thead><tr><th class="no">No</th><th>Nama</th><th>NISN</th><th>L/P</th><th v-if="bukanSiswa">Terakhir aktif</th></tr></thead>
                     <tbody>
-                        <tr v-for="(s, i) in siswa" :key="s.id"><td>{{ i + 1 }}</td><td class="tebal">{{ s.name }}</td><td>{{ s.username }}</td><td>{{ s.jk ?? '-' }}</td>
+                        <tr v-for="(s, i) in siswa" :key="s.id"><td class="no">{{ i + 1 }}</td><td class="tebal">{{ s.name }}</td><td>{{ s.username }}</td><td>{{ s.jk ?? '-' }}</td>
                             <td v-if="bukanSiswa" class="kecil-redup">{{ s.terakhir_aktif }}</td></tr>
                     </tbody>
                 </table></div>

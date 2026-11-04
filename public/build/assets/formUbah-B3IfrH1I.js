@@ -1,0 +1,1 @@
+import{D as e,i as t,r as n}from"./app-BNyUYAlW.js";function r(r,i){let a=t(),o=n(i(r()));return e(()=>a.props,e=>{Object.keys(e.errors??{}).length>0||e.flash?.error||(o.defaults(i(r())),o.reset(),o.clearErrors())}),o}export{r as t};

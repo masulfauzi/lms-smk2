@@ -21,9 +21,9 @@ const cetak = () => window.print();
             </div>
         </div>
         <div class="kartu rapat"><div class="tabel-wrap"><table class="matriks">
-            <thead><tr><th>No</th><th>Nama</th><th v-for="r in ruang" :key="r.id" :title="r.mapel"><Link :href="route('ruang.nilai', r.id)">{{ r.kode }}</Link></th><th>Rata-rata</th><th>Rank</th></tr></thead>
+            <thead><tr><th class="no">No</th><th>Nama</th><th v-for="r in ruang" :key="r.id" :title="r.mapel"><Link :href="route('ruang.nilai', r.id)">{{ r.kode }}</Link></th><th>Rata-rata</th><th>Rank</th></tr></thead>
             <tbody>
-                <tr v-for="(s, i) in siswa" :key="s.id"><td>{{ i + 1 }}</td><td class="tebal" style="white-space:nowrap">{{ s.nama }}</td>
+                <tr v-for="(s, i) in siswa" :key="s.id"><td class="no">{{ i + 1 }}</td><td class="tebal" style="white-space:nowrap">{{ s.nama }}</td>
                     <td v-for="r in ruang" :key="r.id" :class="s.nilai[r.id] !== null && s.nilai[r.id] < r.kkm ? 'n-rendah' : ''">{{ s.nilai[r.id] ?? '·' }}</td>
                     <td class="tebal">{{ s.rata ?? '-' }}</td><td>{{ s.rank ?? '-' }}</td></tr>
                 <tr v-if="!siswa.length"><td colspan="99"><Kosong ikon="award" judul="Tidak ada data" /></td></tr>

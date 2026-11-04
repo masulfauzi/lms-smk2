@@ -26,9 +26,9 @@ const cetak = () => window.print();
             </div>
         </div>
         <div class="kartu rapat"><div class="tabel-wrap"><table>
-            <thead><tr><th>No</th><th>Nama</th><th>NISN</th><th class="angka">Hadir</th><th class="angka">Izin</th><th class="angka">Sakit</th><th class="angka">Alpa</th><th class="angka">% Hadir</th></tr></thead>
+            <thead><tr><th class="no">No</th><th>Nama</th><th>NISN</th><th class="angka">Hadir</th><th class="angka">Izin</th><th class="angka">Sakit</th><th class="angka">Alpa</th><th class="angka">% Hadir</th></tr></thead>
             <tbody>
-                <tr v-for="(r, i) in rekap" :key="r.id"><td>{{ i + 1 }}</td><td class="tebal">{{ r.nama }}</td><td>{{ r.nisn }}</td>
+                <tr v-for="(r, i) in rekap" :key="r.id"><td class="no">{{ i + 1 }}</td><td class="tebal">{{ r.nama }}</td><td>{{ r.nisn }}</td>
                     <td class="angka">{{ r.hadir }}</td><td class="angka">{{ r.izin }}</td><td class="angka">{{ r.sakit }}</td>
                     <td :class="['angka', r.alpa >= 3 ? 'n-rendah' : '']">{{ r.alpa }}</td><td :class="['angka tebal', r.persen !== null && r.persen < 75 ? 'n-rendah' : '']">{{ r.persen !== null ? r.persen + '%' : '-' }}</td></tr>
                 <tr v-if="!rekap.length"><td colspan="8"><Kosong ikon="check-square" judul="Tidak ada data" /></td></tr>

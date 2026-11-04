@@ -85,9 +85,9 @@ const simpanPresensi = () => form
             <h2><Icon name="check-square" :size="18" />Presensi pertemuan {{ pertemuan.urutan }}
                 <span class="kanan kecil-redup">{{ hadirCount }} hadir dari {{ presensiSiswa.length }} siswa</span></h2>
             <div class="tabel-wrap mt"><table>
-                <thead><tr><th>No</th><th>Nama</th><th>Waktu presensi</th><th>Status</th><th>Keterangan</th></tr></thead>
+                <thead><tr><th class="no">No</th><th>Nama</th><th>Waktu presensi</th><th>Status</th><th>Keterangan</th></tr></thead>
                 <tbody>
-                    <tr v-for="(s, i) in presensiSiswa" :key="s.id"><td>{{ i + 1 }}</td><td class="tebal">{{ s.nama }}</td>
+                    <tr v-for="(s, i) in presensiSiswa" :key="s.id"><td class="no">{{ i + 1 }}</td><td class="tebal">{{ s.nama }}</td>
                         <td class="kecil-redup">{{ s.waktu }}</td>
                         <td><div class="status-pilih">
                             <label v-for="(hrf, val) in huruf" :key="val" :title="statusLabel[val]"><input v-model="form.status[s.id]" type="radio" :name="`status[${s.id}]`" :value="val"><span :class="hrf.toLowerCase()">{{ hrf }}</span></label>
